@@ -1,79 +1,64 @@
+from PIL import Image, ImageDraw, ImageFont
+import numpy as np
+import matplotlib.pyplot as plt
+
 import torch
-from torch import utils
+from torch.autograd import Variable
+# from torch import utils
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable
-from torchsummary import summary
+import torch.optim as optim
+import os
+from torchvision import datasets
+import torchvision.transforms as transforms
+import torchvision
+from model import StegNet
+import math
+from torch.utils.data import DataLoader
+from datasets import *
 from torch.utils.tensorboard import SummaryWriter
-
-
-class mod(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-        self.r1 = nn.Sequential(
-            nn.Conv2d(3, 50, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(50, 50, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(50, 50, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(50, 50, kernel_size=3, padding=1),
-            nn.ReLU())
-        self.r2 = nn.Sequential(
-            nn.Conv2d(3, 50, kernel_size=4, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(50, 50, kernel_size=4, padding=2),
-            nn.ReLU(),
-            nn.Conv2d(50, 50, kernel_size=4, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(50, 50, kernel_size=4, padding=2),
-            nn.ReLU())
-        self.r3 = nn.Sequential(
-            nn.Conv2d(3, 50, kernel_size=5, padding=2),
-            nn.ReLU(),
-            nn.Conv2d(50, 50, kernel_size=5, padding=2),
-            nn.ReLU(),
-            nn.Conv2d(50, 50, kernel_size=5, padding=2),
-            nn.ReLU(),
-            nn.Conv2d(50, 50, kernel_size=5, padding=2),
-            nn.ReLU())
-        self.r4 = nn.Sequential(
-            nn.Conv2d(150, 50, kernel_size=3, padding=1),
-            nn.ReLU())
-        self.r5 = nn.Sequential(
-            nn.Conv2d(150, 50, kernel_size=4, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(50, 50, kernel_size=4, padding=2),
-            nn.ReLU())
-        self.r6 = nn.Sequential(
-            nn.Conv2d(150, 50, kernel_size=5, padding=2),
-            nn.ReLU())
-        self.r7 = nn.Sequential(
-            nn.Conv2d(150, 3, kernel_size=1, padding=0))
-
-    def forward(self, x, x2):
-        r1 = self.r1(x)
-        r2 = self.r2(x)
-        r3 = self.r3(x)
-        x = torch.cat((r1, r2, r3), 1)
-        r4 = self.r4(x)
-        r5 = self.r5(x)
-        r6 = self.r6(x)
-        x = torch.cat((r4, r5, r6), 1)
-        x = self.r7(x)
-        x2 = x
-        return x, x2
-
+from torchsummary import summary
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = mod().to(device)
 
-dummy_input1 = torch.randn(16, 3, 30, 30)
-dummy_input2 = torch.randn(16, 3, 30, 30)
-dummy_input1 = dummy_input1.to(device)
-dummy_input2 = dummy_input2.to(device)
+MODEL_PATH = '../DeepSteganography-master/model/'
+IMAGE_PATH = '../DeepSteganography-master/test/'
+
+img1 = Image.open(IMAGE_PATH + '1.jpg')
+img2 = Image.open(IMAGE_PATH + '2.jpg')
+
+transform = transforms.Compose([
+    transforms.Resize([224, 224]),
+    transforms.ToTensor(),
+    transforms.Normalize(mean = [ 0.485, 0.456, 0.406 ],
+                         std = [ 0.229, 0.224, 0.225 ]),
+])
 
 
-with SummaryWriter(comment='RDNet') as w:
-    w.add_graph(model,(dummy_input1,dummy_input2))
+model = StegNet().to(device)
+model.load_state_dict(torch.load(MODEL_PATH + 'model.pkl'))
+
+draw1 = ImageDraw.Draw(img1)
+draw2 = ImageDraw.Draw(img2)
+
+cover = transform(img1)
+hidden = transform(img2)
+
+torchvision.utils.save_image(hidden, filename=IMAGE_PATH + '_hidden.jpg')
+torchvision.utils.save_image(cover, filename=IMAGE_PATH + '_output.jpg')
+
+if torch.cuda.is_available():
+    cover = cover.view(1, 3, 224, 224).cuda()
+    hidden = hidden.view(1, 3, 224, 224).cuda()
+else:
+    cover = cover.view(1, 3, 224, 224)
+    hidden = hidden.view(1, 3, 224, 224)
+
+with torch.no_grad():
+    model.eval()
+
+    test_hidden, test_output = model(hidden, cover)
+
+    torchvision.utils.save_image(test_hidden, filename=IMAGE_PATH + '_out' + '_hidden.jpg')
+    torchvision.utils.save_image(test_output, filename=IMAGE_PATH + '_out' + '_output.jpg')
+

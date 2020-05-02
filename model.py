@@ -9,9 +9,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def gaussian_noise(tensor):
     noise = torch.nn.init.normal_(tensor, mean=0, std=0.1)
-    tensor.to(device)
-    noise.to(device)
-    return Variable(tensor + noise)
+
+    return tensor + noise
 
 class PrepNet(nn.Module):
     def __init__(self):
@@ -141,7 +140,7 @@ class HidingNet(nn.Module):
 
         x = torch.cat((h4, h5, h6), 1)
         x = self.h7(x)
-        # x_n = gaussian_noise(x.data)
+        x.data = gaussian_noise(x.data)
         return x
 
 

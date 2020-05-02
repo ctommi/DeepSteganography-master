@@ -19,7 +19,7 @@ from torchsummary import summary
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-learning_rate = 0.0005
+learning_rate = 0.0001
 epochs = 150
 beta = 1
 batch_size = 4
@@ -96,8 +96,7 @@ def calculate_psnr(img1, img2):
 #                                          drop_last=True)
 # Data loading code
 transform = transforms.Compose([
-    transforms.RandomResizedCrop(224),
-    transforms.RandomHorizontalFlip(),
+    transforms.Resize([200, 300]),
     transforms.ToTensor(),
     transforms.Normalize(mean = [ 0.485, 0.456, 0.406 ],
                          std = [ 0.229, 0.224, 0.225 ]),
@@ -122,15 +121,15 @@ testloader = DataLoader(
 )
 
 model = StegNet().to(device)
-dummy_input1 = torch.randn(2, 3, 224, 224)
-dummy_input2 = torch.randn(2, 3, 224, 224)
+dummy_input1 = torch.randn(2, 3, 200, 300)
+dummy_input2 = torch.randn(2, 3, 200, 300)
 dummy_input1 = dummy_input1.to(device)
 dummy_input2 = dummy_input2.to(device)
 
 
 if __name__ == "__main__":
 
-    print(summary(model, [(3, 224, 224), (3, 224, 224)], device="cuda", batch_size=batch_size))
+    print(summary(model, [(3, 300, 200), (3, 300, 200)], device="cuda", batch_size=batch_size))
 
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, betas=(0.5,0.999))
     losses = []
@@ -162,6 +161,9 @@ if __name__ == "__main__":
             covers = Variable(covers).to(device)
             secrets = Variable(secrets).to(device)
 
+            torchvision.utils.save_image(covers, filename=IMAGE_PATH + str(epoch) + '_covers.jpg')
+            torchvision.utils.save_image(secrets, filename=IMAGE_PATH + str(epoch) + '_secrets.jpg')
+
             optimizer.zero_grad()
             hidden, output = model(secrets, covers)
             loss, loss_cover, loss_secret = steg_loss(output, hidden, secrets, covers, beta)
@@ -171,7 +173,7 @@ if __name__ == "__main__":
             train_loss.append(loss.item())
             losses.append(loss.item())
 
-            torch.save(model.state_dict(), MODEL_PATH + 'model.pkl')
+
 
             avg_train_loss = np.mean(train_loss)
             # print(avg_train_loss)
@@ -190,9 +192,9 @@ if __name__ == "__main__":
         writer.add_scalars("Train_Loss", {"Train": avg_train_loss}, epoch)
 
         # 每个epoch，记录梯度，权值
-        for name, param in model.named_parameters():
-            writer.add_histogram(name + '_grad', param.grad, epoch)
-            writer.add_histogram(name + '_data', param, epoch)
+        # for name, param in model.named_parameters():
+        #     writer.add_histogram(name + '_grad', param.grad, epoch)
+        #     writer.add_histogram(name + '_data', param, epoch)
 
         with open(filename, 'a') as f:
             f.write(str(avg_train_loss))
@@ -248,6 +250,11 @@ if __name__ == "__main__":
 
             # 记录数据，保存于event file
             writer.add_scalars("Val_Loss", {"Val": avg_test_loss}, epoch)
+
+        # -----------------------
+        #  save model
+        # -----------------------
+        torch.save(model.state_dict(), MODEL_PATH + 'model.pkl')
 
     writer.close()
 
